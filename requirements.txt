@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+python-multipart
+openai
+faiss-cpu
+numpy
+streamlit
+requests
+python-dotenv
+email-validator

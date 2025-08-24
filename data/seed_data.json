@@ -1,0 +1,32 @@
+{
+    "users": [
+      "alice@example.com",
+      "bob@example.com"
+    ],
+    "sessions": [
+      {
+        "email": "alice@example.com",
+        "title": "Python Q&A",
+        "messages": [
+          { "role": "user", "content": "What is Python?" },
+          { "role": "ai", "content": "Python is a high-level, interpreted language for many domains." }
+        ]
+      },
+      {
+        "email": "bob@example.com",
+        "title": "FastAPI Chat",
+        "messages": [
+          { "role": "user", "content": "How do I start with FastAPI?" },
+          { "role": "ai", "content": "Install FastAPI and uvicorn, then create an APIRouter." }
+        ]
+      }
+    ],
+    "documents": [
+      {
+        "email": "alice@example.com",
+        "title": "Python Basics",
+        "content": "Python is a versatile language for web, data, and scripting."
+      }
+    ]
+  }
+  

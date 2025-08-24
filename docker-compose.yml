@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: rag_backend
+    volumes:
+      - ./backend:/app/backend
+      - ./chat_app.db:/app/chat_app.db
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on: []
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: rag_frontend
+    volumes:
+      - ./frontend:/app/frontend
+      - ./chat_app.db:/app/chat_app.db
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    environment:
+      - API_URL=http://backend:8000
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    command: streamlit run frontend/app.py --server.address=0.0.0.0 --server.port=8501
+
+volumes:
+  db_data:
