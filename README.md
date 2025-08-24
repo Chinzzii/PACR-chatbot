@@ -74,7 +74,7 @@ venv\Scripts\activate         # Windows
 
 8. Run Frontend (Streamlit) from project root folder
 ```bash
-streamlit run frontend/app.py
+python -m streamlit run frontend/app.py
 ```
 
 9. Have fun!
