@@ -6,7 +6,12 @@ python-multipart
 openai
 faiss-cpu
 numpy
+pandas
 streamlit
 requests
 python-dotenv
 email-validator
+PyPDF2
+python-docx
+docx
+tools
