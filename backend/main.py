@@ -1,13 +1,15 @@
+# backend/main.py
 import io
 import os
 import numpy as np
 from typing import Dict, Any, List
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+import tempfile
 
 from .db import SessionLocal, engine
 from .models import Base, User, ChatSession, ChatMessage, Document
@@ -110,9 +112,21 @@ def get_messages(session_id: int, db: Session = Depends(get_db)):
 
 # --- Document Upload ---
 
+@app.get("/sessions/{session_id}/documents")
+def list_documents(session_id: int, db: Session = Depends(get_db)):
+    """List all documents tied to a session."""
+    session = db.get(ChatSession, session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+
+    docs = db.query(Document).filter(Document.session_id == session_id).all()
+    return [{"id": d.id, "filename": d.filename} for d in docs]
+
+# backend/main.py
+
 @app.post("/sessions/{session_id}/documents")
 def upload_document(session_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """Upload PDF or DOCX to a session for RAG."""
+    """Upload PDF or DOCX to a session for RAG and preview."""
     session = db.get(ChatSession, session_id)
     if not session:
         raise HTTPException(404, "Session not found")
@@ -120,35 +134,50 @@ def upload_document(session_id: int, file: UploadFile = File(...), db: Session =
     filename = file.filename or "upload.bin"
     lowered = filename.lower()
 
+    raw = file.file.read()  # get raw bytes once
+
+    # Save raw file to a documents directory
+    os.makedirs("uploaded_files", exist_ok=True)
+    save_path = os.path.join("uploaded_files", f"{session_id}_{filename}")
+    with open(save_path, "wb") as f:
+        f.write(raw)
+
+    # Extract text for RAG
     try:
         if lowered.endswith(".pdf"):
             import fitz  # PyMuPDF
-            raw = file.file.read()
             pdf = fitz.open(stream=raw, filetype="pdf")
             content = ""
             for page in pdf:
                 content += page.get_text() or ""
         elif lowered.endswith(".docx"):
             from docx import Document as Docx
-            raw = file.file.read()
             doc = Docx(io.BytesIO(raw))
             content = "\n".join(para.text for para in doc.paragraphs)
         else:
             raise HTTPException(400, "Unsupported file type")
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(400, f"File processing error: {e}")
 
     if not content.strip():
         raise HTTPException(400, "No extractable text found in document")
 
-    doc = Document(session_id=session_id, filename=filename, content=content)
+    doc = Document(session_id=session_id, filename=filename, content=content, filepath=save_path)
     db.add(doc)
     db.commit()
     db.refresh(doc)
-    return {"doc_id": doc.id, "filename": doc.filename}
+    return {"id": doc.id, "filename": doc.filename}
 
+
+@app.get("/files/{doc_id}")
+def download_file(doc_id: int, db: Session = Depends(get_db)):
+    doc = db.get(Document, doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    if not doc.filepath or not os.path.exists(doc.filepath):
+        raise HTTPException(404, "File not found on server")
+
+    return FileResponse(doc.filepath, filename=doc.filename, media_type="application/pdf")
 
 # --- Chat Endpoint (with Streaming) ---
 

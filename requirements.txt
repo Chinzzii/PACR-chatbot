@@ -8,6 +8,7 @@ faiss-cpu
 numpy
 pandas
 streamlit
+streamlit-pdf-viewer
 requests
 python-dotenv
 email-validator

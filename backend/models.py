@@ -1,3 +1,4 @@
+# backend/models.py
 import datetime
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
@@ -38,4 +39,5 @@ class Document(Base):
     session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False)
     filename = Column(String, nullable=False)
     content = Column(Text, nullable=False)
+    filepath = Column(String, nullable=True)
     session = relationship("ChatSession", back_populates="documents")

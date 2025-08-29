@@ -3,6 +3,7 @@ import os
 import requests
 import streamlit as st
 from dotenv import load_dotenv
+from streamlit_pdf_viewer import pdf_viewer 
 
 load_dotenv()
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
@@ -27,25 +28,27 @@ def initialize_session():
 
 
 def login():
-    st.title("Login")
-    email = st.text_input("Enter your email", key="email_input")
-    if st.button("Login"):
-        if not email:
-            st.error("Please enter an email.")
-            return
-        try:
-            resp = requests.post(
-                f"{BACKEND_URL}/login",
-                json={"email": email},
-                timeout=REQUEST_TIMEOUT,
-            )
-            resp.raise_for_status()
-            user = resp.json()
-            st.session_state.user_id = user["id"]
-            st.session_state.user_email = user["email"]
-            st.rerun()
-        except Exception as e:
-            st.error(f"Login failed: {e}")
+    _, col2, _ = st.columns([1, 1, 1])
+    with col2:
+        st.title("Login")
+        email = st.text_input("Enter your email", key="email_input")
+        if st.button("Login"):
+            if not email:
+                st.error("Please enter an email.")
+                return
+            try:
+                resp = requests.post(
+                    f"{BACKEND_URL}/login",
+                    json={"email": email},
+                    timeout=REQUEST_TIMEOUT,
+                )
+                resp.raise_for_status()
+                user = resp.json()
+                st.session_state.user_id = user["id"]
+                st.session_state.user_email = user["email"]
+                st.rerun()
+            except Exception as e:
+                st.error(f"Login failed: {e}")
 
 
 def select_or_create_session():
@@ -176,8 +179,22 @@ def chat_completion(messages, stream=False):
         return requests.post(f"{BACKEND_URL}/chat", json=payload, timeout=REQUEST_TIMEOUT)
 
 
+def get_session_documents(session_id):
+    """Fetch documents tied to a session."""
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/sessions/{session_id}/documents",
+            timeout=REQUEST_TIMEOUT,
+        )
+        if resp.ok:
+            return resp.json()
+    except Exception as e:
+        st.error(f"Load documents failed: {e}")
+    return []
+
+
 def main():
-    st.set_page_config(page_title="AI Assistant", page_icon="🤖")
+    st.set_page_config(page_title="AI Assistant", page_icon="🤖", layout="wide")
     initialize_session()
 
     if not st.session_state.user_id:
@@ -201,42 +218,97 @@ def main():
         st.markdown(f"**Chat Model:** `{st.session_state.model}`")
         st.markdown(f"**Embed Model:** `{st.session_state.embed_model}`")
 
-    # Display past messages
-    for msg in st.session_state.messages:
-        display_message(msg["role"], msg["content"])
+    # Layout: chat on left, pdf preview on right
+    if st.session_state.session_id:
+        docs = get_session_documents(st.session_state.session_id)
+    else:
+        docs = []
 
-    # Chat input
-    if prompt := st.chat_input("How can I help you?"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        display_message("user", prompt)
+    if docs:  # If this session has at least one doc (show only PDFs)
+        col1, col2 = st.columns([2, 1])  # 2/3 chat, 1/3 preview
+        with col1:
+            # Display past messages
+            for msg in st.session_state.messages:
+                display_message(msg["role"], msg["content"])
 
-        with st.chat_message("assistant"):
-            try:
-                if st.session_state.streaming:
-                    res = chat_completion(st.session_state.messages, stream=True)
-                    res.raise_for_status()
-                    resp_container = st.empty()
-                    full_text = ""
-                    # Stream plain-text chunks
-                    for chunk in res.iter_content(chunk_size=1024):
-                        if not chunk:
-                            continue
-                        text = chunk.decode("utf-8", errors="ignore")
-                        if not text.strip():
-                            continue
-                        full_text += text
-                        resp_container.markdown(full_text)
-                    if full_text.strip():
-                        st.session_state.messages.append({"role": "assistant", "content": full_text})
+            # Chat input
+            if prompt := st.chat_input("How can I help you?"):
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                display_message("user", prompt)
+
+                with st.chat_message("assistant"):
+                    try:
+                        if st.session_state.streaming:
+                            res = chat_completion(st.session_state.messages, stream=True)
+                            res.raise_for_status()
+                            resp_container = st.empty()
+                            full_text = ""
+                            for chunk in res.iter_content(chunk_size=1024):
+                                if not chunk:
+                                    continue
+                                text = chunk.decode("utf-8", errors="ignore")
+                                if not text.strip():
+                                    continue
+                                full_text += text
+                                resp_container.markdown(full_text)
+                            if full_text.strip():
+                                st.session_state.messages.append({"role": "assistant", "content": full_text})
+                        else:
+                            res = chat_completion(st.session_state.messages, stream=False)
+                            res.raise_for_status()
+                            answer = res.json().get("response", "")
+                            if answer:
+                                st.markdown(answer)
+                                st.session_state.messages.append({"role": "assistant", "content": answer})
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        with col2:
+            st.subheader("📄 Document Preview")
+            first_doc = next((d for d in docs if d["filename"].lower().endswith(".pdf")), None)
+            if first_doc:
+                resp = requests.get(f"{BACKEND_URL}/files/{first_doc['id']}", timeout=REQUEST_TIMEOUT)
+                if resp.ok:
+                    pdf_bytes = resp.content
+                    pdf_viewer(pdf_bytes, width=350, height=500)
                 else:
-                    res = chat_completion(st.session_state.messages, stream=False)
-                    res.raise_for_status()
-                    answer = res.json().get("response", "")
-                    if answer:
-                        st.markdown(answer)
-                        st.session_state.messages.append({"role": "assistant", "content": answer})
-            except Exception as e:
-                st.error(f"Error: {e}")
+                    st.error("Could not load PDF preview.")
+            else:
+                st.info("No PDF available for preview.")
+    else:
+        # No docs → full-width chat
+        for msg in st.session_state.messages:
+            display_message(msg["role"], msg["content"])
+
+        if prompt := st.chat_input("How can I help you?"):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            display_message("user", prompt)
+
+            with st.chat_message("assistant"):
+                try:
+                    if st.session_state.streaming:
+                        res = chat_completion(st.session_state.messages, stream=True)
+                        res.raise_for_status()
+                        resp_container = st.empty()
+                        full_text = ""
+                        for chunk in res.iter_content(chunk_size=1024):
+                            if not chunk:
+                                continue
+                            text = chunk.decode("utf-8", errors="ignore")
+                            if not text.strip():
+                                continue
+                            full_text += text
+                            resp_container.markdown(full_text)
+                        if full_text.strip():
+                            st.session_state.messages.append({"role": "assistant", "content": full_text})
+                    else:
+                        res = chat_completion(st.session_state.messages, stream=False)
+                        res.raise_for_status()
+                        answer = res.json().get("response", "")
+                        if answer:
+                            st.markdown(answer)
+                            st.session_state.messages.append({"role": "assistant", "content": answer})
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
 
 if __name__ == "__main__":
