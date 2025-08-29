@@ -225,7 +225,7 @@ def main():
         docs = []
 
     if docs:  # If this session has at least one doc (show only PDFs)
-        col1, col2 = st.columns([2, 1])  # 2/3 chat, 1/3 preview
+        col1, col2 = st.columns([1, 1])  # 2/3 chat, 1/3 preview
         with col1:
             # Display past messages
             for msg in st.session_state.messages:
@@ -263,13 +263,13 @@ def main():
                     except Exception as e:
                         st.error(f"Error: {e}")
         with col2:
-            st.subheader("📄 Document Preview")
+            st.subheader("📄 Document Preview", width="stretch")
             first_doc = next((d for d in docs if d["filename"].lower().endswith(".pdf")), None)
             if first_doc:
                 resp = requests.get(f"{BACKEND_URL}/files/{first_doc['id']}", timeout=REQUEST_TIMEOUT)
                 if resp.ok:
                     pdf_bytes = resp.content
-                    pdf_viewer(pdf_bytes, width=350, height=500)
+                    pdf_viewer(pdf_bytes, width="100%")
                 else:
                     st.error("Could not load PDF preview.")
             else:
