@@ -16,3 +16,8 @@ PyPDF2
 python-docx
 docx
 tools
+pytesseract
+Pillow
+pdf2image
+groq
+poppler-utils
